@@ -1,122 +1,153 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter/material.dart'; // Keep this import
+import 'package:provider/provider.dart';
+import 'services/database_helper.dart';
+import 'services/notification_service.dart'; // Import NotificationService
+import 'screens/timer_screen.dart';
+import 'screens/calendar_screen.dart';
+import 'screens/statistics_screen.dart';
+import 'screens/settings_screen.dart' as my_screens;
+import 'package:flutter_settings_screens/flutter_settings_screens.dart' hide SettingsScreen;
 
-void main() {
-  runApp(const MyApp());
+// Define keys for settings consistently
+const String kDailyReminderEnabled = 'daily_reminder_enabled';
+const String kDailyReminderTime = 'daily_reminder_time';
+
+void main() async { // Make main async
+  // Ensure Flutter bindings are initialized before using plugins
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize flutter_settings_screens
+  await Settings.init();
+
+  // Initialize DatabaseHelper
+  final databaseHelper = DatabaseHelper();
+  // Optional: Initialize the database if needed (e.g., open connection)
+  // await databaseHelper.database; // Uncomment if initialization is required here
+
+  // Initialize NotificationService
+  final notificationService = NotificationService();
+  await notificationService.init();
+
+  // Reschedule reminder on startup if enabled
+  // Use ?? false to handle potential null return from getValue
+  final bool isReminderEnabled = Settings.getValue<bool>(kDailyReminderEnabled, defaultValue: false) ?? false;
+  if (isReminderEnabled) {
+    // Retrieve the stored TimeOfDay. Need to handle potential null or incorrect type.
+    // flutter_settings_screens might store TimeOfDay in a specific format (e.g., Map or String).
+    // Let's assume it stores it correctly retrieveable as TimeOfDay for now.
+    // We need a default time if none is stored yet.
+    final TimeOfDay defaultTime = const TimeOfDay(hour: 8, minute: 0); // Default 8:00 AM
+    final TimeOfDay? reminderTime = Settings.getValue<TimeOfDay>(kDailyReminderTime, defaultValue: defaultTime);
+
+    if (reminderTime != null) {
+        print("Rescheduling reminder on startup for $reminderTime");
+        // No need to request permissions here, assume they were granted when enabled.
+        // If permissions were revoked, scheduling might fail silently or throw.
+        // A more robust solution might re-check permissions.
+        await notificationService.scheduleDailyReminder(reminderTime);
+    } else {
+        print("Reminder enabled but no valid time found in settings. Cannot reschedule.");
+        // Optionally, disable the reminder setting if the time is invalid/missing
+        // Settings.setValue(kDailyReminderEnabled, false);
+    }
+  }
+
+
+  runApp(
+    // Provide multiple services using MultiProvider
+    MultiProvider(
+      providers: [
+        Provider<DatabaseHelper>(create: (_) => databaseHelper),
+        Provider<NotificationService>(create: (_) => notificationService),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Meditation Journal', // Updated title
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal), // Example theme color
+        useMaterial3: true,
+      ), // <-- Added missing comma here
+      // Set HomeScreen as the home screen
+      home: const HomeScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+// Removed the default MyHomePage StatefulWidget and its State
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _HomeScreenState extends State<HomeScreen> {
+  int _selectedIndex = 0;
 
-  void _incrementCounter() {
+  // List of widgets to display based on the selected index
+  // List of widgets to display based on the selected index
+  // Remove 'const' because SettingsScreen() might not be const
+  static final List<Widget> _widgetOptions = <Widget>[
+    const TimerScreen(), // Assuming these have const constructors
+    const CalendarScreen(), // Assuming these have const constructors
+    const StatisticsScreen(), // Assuming these have const constructors
+    my_screens.SettingsScreen(), // Use prefix, remove const
+  ];
+
+  void _onItemTapped(int index) {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _selectedIndex = index;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
+      // AppBar can be removed if each screen provides its own,
+      // or kept for a consistent top bar. Let's remove it for now.
+      // appBar: AppBar(
+      //   title: const Text('Meditation Journal'),
+      // ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
+        child: _widgetOptions.elementAt(_selectedIndex),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.timer),
+            label: 'Timer',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today),
+            label: 'Calendar',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart), // Or Icons.analytics, Icons.show_chart
+            label: 'Stats',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
+        type: BottomNavigationBarType.fixed, // Explicitly set type for 4+ items
+        currentIndex: _selectedIndex,
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Colors.grey, // Set unselected color for clarity
+        onTap: _onItemTapped,
+      ),
     );
   }
 }
